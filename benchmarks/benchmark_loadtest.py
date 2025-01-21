@@ -1,19 +1,12 @@
 
 import os
-from turtledemo.penrose import start
 
 import pytest
-import h5py
 import numpy as np
-import scipy.signal as signal
-import pandas as pd
-from typing import List, Tuple
 
 from datetime import datetime
 
-from brainmaze_hdf.io import BrainmazeHDFWriter, BrainmazeHDFReader
-
-from brainmaze_hdf.utils import get_data_segments,create_block_indexes
+from pyneuro21 import BrainmazeHDFWriter, BrainmazeHDFReader
 
 from conftest import temp_dir
 
@@ -78,12 +71,12 @@ def test_benchmark_meftoolas(temp_dir: str):
 def test_benchmark_BrainMazeHDFWriter(temp_dir: str):
     path = os.path.join(temp_dir, 'test.h5')
 
-    signal_len_s = 24*3600
+    signal_len_s = 6*3600
     # signal_len_s = 10
     fs = 8000
     processing_block_size = 20*60
     n_channels = 1
-    block_size = fs
+    block_size = fs*10
 
     x = np.random.randn(signal_len_s * fs)
 

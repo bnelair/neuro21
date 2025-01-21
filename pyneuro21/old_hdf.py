@@ -2,16 +2,17 @@
 import os
 # from turtledemo.penrose import start
 
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import h5py
 import numpy as np
-import scipy.signal as signal
 import pandas as pd
 from typing import List, Tuple
 
-from brainmaze_hdf.utils import get_data_segments, create_block_indexes, reinterpolate, get_involved_intervals
+from pyneuro21.utils import create_block_indexes, reinterpolate, get_involved_intervals
 
+
+# TODO: DEPRECATED! This is a previous version. Now serves as a template.
 class BrainmazeHDFSession(ABC):
     def __init__(self, path: str, block_size=1000, compression_format='gzip'):
         self.path = path
@@ -21,6 +22,7 @@ class BrainmazeHDFSession(ABC):
 
         self.compression_format = compression_format
         self.block_size = block_size
+        self.metadata_loaded = False
 
     def _open_read(self):
         self._mode = 'r'
@@ -39,6 +41,18 @@ class BrainmazeHDFSession(ABC):
 
         self._mode = ''
         self._session = None
+
+    def _load_metadata_to_memory(self):
+        self._metadata = {}
+        for channel in self.channels:
+            self._metadata[channel] = self._get_channel_segment_metadata(channel)
+            for segment in self._metadata[channel]['segment_name']:
+                segment_block_metadata = self._session[channel][segment]['block_meta'][()]
+                segment_block_names = [str(fn) for fn in segment_block_metadata[:, 0]]
+                self._metadata[channel][segment]['names'] = segment_block_names
+                self._metadata[channel][segment]['indexes'] = segment_block_metadata
+
+        self.metadata_loaded = True
 
     def _create_channel(self, channel):
         if channel not in self._session:
@@ -123,7 +137,6 @@ class BrainmazeHDFSession(ABC):
         self._session[channel][segment]['block_meta'].resize((n_blocks + 1, 3), )
         self._session[channel][segment]['block_meta'][-1] = idx
 
-
     def _get_involved_segments(self, channel: str, start_uutc: float, end_uutc: float) -> pd.DataFrame:
         '''
         Get the segments that are involved in the read operation. This function returns a DataFrame with the
@@ -132,6 +145,7 @@ class BrainmazeHDFSession(ABC):
         :param end_uutc:
         :return:
         '''
+
 
         seg_metadata = self._get_channel_segment_metadata(channel)
         intervals = np.array([seg_metadata['start_uutc'], seg_metadata['end_uutc']]).T
@@ -147,8 +161,12 @@ class BrainmazeHDFSession(ABC):
         :return:
         '''
 
-        segment_block_metadata = self._session[channel][segment]['block_meta'][()]
-        segment_block_names = [str(fn) for fn in segment_block_metadata[:, 0]]
+        if not self.metadata_loaded:
+            segment_block_metadata = self._session[channel][segment]['block_meta'][()]
+            segment_block_names = [str(fn) for fn in segment_block_metadata[:, 0]]
+        else:
+            segment_block_names = self._metadata[channel][segment]['names']
+            segment_block_metadata = self._metadata[channel][segment]['indexes']
 
         intervals = segment_block_metadata[:, :2]
         cond = get_involved_intervals(intervals, start_uutc, end_uutc)

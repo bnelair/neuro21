@@ -1,0 +1,8 @@
+pytest~=8.3.4
+numpy~=1.26.4
+pandas~=2.2.3
+h5py~=3.12.1
+scipy~=1.14.1
+zlib~=1.2.13
+setuptools~=75.1.0
+pybind11

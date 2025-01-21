@@ -1,9 +1,8 @@
-
-import pytest
 import numpy as np
 import pandas as pd
 
-from brainmaze_hdf.utils import get_data_segments, create_block_indexes, reinterpolate, get_involved_intervals
+from pyneuro21.utils import get_data_segments, create_block_indexes, reinterpolate, get_involved_intervals
+
 
 def test_get_data_segments_no_nans():
     """Test with data containing no NaN values."""
@@ -14,6 +13,7 @@ def test_get_data_segments_no_nans():
 
     assert data_segments.equals(expected_df)
 
+
 def test_get_data_segments_only_nans():
     """Test with data containing no NaN values."""
     data = np.array([np.nan]*5)
@@ -22,6 +22,7 @@ def test_get_data_segments_only_nans():
     data_segments = get_data_segments(data)
 
     assert data_segments.equals(expected_df)
+
 
 def test_get_data_segments_with_nans():
     """Test with data containing NaN values."""
@@ -35,6 +36,7 @@ def test_get_data_segments_with_nans():
     data_segments = get_data_segments(data)
     assert data_segments.equals(expected_df)
 
+
 def test_get_data_segments_nans_beginning():
     """Test with data starting with NaN values."""
     data = np.array([np.nan, np.nan, 1, 2, 3, 4, 5])
@@ -43,6 +45,7 @@ def test_get_data_segments_nans_beginning():
     data_segments = get_data_segments(data)
     assert data_segments.equals(expected_df)
 
+
 def test_get_data_segments_nans_end():
     """Test with data ending with NaN values."""
     data = np.array([1, 2, 3, 4, 5, np.nan, np.nan])
@@ -50,7 +53,6 @@ def test_get_data_segments_nans_end():
 
     data_segments = get_data_segments(data)
     assert data_segments.equals(expected_df)
-
 
 
 def test_create_block_indexes_no_nans():
@@ -66,6 +68,7 @@ def test_create_block_indexes_no_nans():
     block_indexes = create_block_indexes(data, block_size)
     assert block_indexes.equals(expected_indexes)
 
+
 def test_create_block_indexes_with_nans():
     """Test with data containing NaN values."""
     data = np.array([1, 2, 3, np.nan, 5, 6, 7, np.nan, 9, 10, np.nan, np.nan, np.nan, 14])
@@ -79,6 +82,7 @@ def test_create_block_indexes_with_nans():
     block_indexes = create_block_indexes(data, block_size)
     assert block_indexes.equals(expected_indexes)
 
+
 def test_create_block_indexes_with_nans_at_boundaries():
     """Test with NaN values at the beginning and end."""
     data = np.array([np.nan, 1, 2, 3, 4, np.nan])
@@ -89,6 +93,7 @@ def test_create_block_indexes_with_nans_at_boundaries():
     ])
     block_indexes = create_block_indexes(data, block_size)
     assert block_indexes.equals(expected_indexes)
+
 
 def test_create_block_indexes_with_consecutive_nans():
     """Test with consecutive NaN values."""
@@ -101,6 +106,7 @@ def test_create_block_indexes_with_consecutive_nans():
     ])
     block_indexes = create_block_indexes(data, block_size)
     assert block_indexes.equals(expected_indexes)
+
 
 def test_create_block_indexes_with_all_nans():
     """Test with all NaN values."""
@@ -126,7 +132,6 @@ def test_reinterpolate_no_nans():
     x_out_valid, y_out = reinterpolate(x_in, y_in, x_out)
 
     assert np.all(y_out == y_ref)
-
 
 
 def test_get_involved_intervals():
