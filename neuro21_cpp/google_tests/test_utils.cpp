@@ -11,13 +11,13 @@
 // ##################################################
 TEST(DataGenerationTest, GenerateCumulativeRandomDataTest) {
     const size_t test_size = 10;
-    std::vector<double> result = neuro21::Generate::generate_cumulative_random_data(test_size);
+    std::vector<double_t> result = neuro21::Generate::generate_cumulative_random_data(test_size);
     ASSERT_EQ(result.size(), test_size) << "The result size should match the input size.";
 }
 
 TEST(DataGenerationTest, GebnerateRandomSamplesTest) {
     const size_t test_size = 10;
-    std::vector<double> result = neuro21::Generate::generate_random_samples(test_size);
+    std::vector<double_t> result = neuro21::Generate::generate_random_samples(test_size);
     ASSERT_EQ(result.size(), test_size) << "The result size should match the input size.";
 }
 

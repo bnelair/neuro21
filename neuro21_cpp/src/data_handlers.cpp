@@ -83,6 +83,8 @@ namespace neuro21 {
     };
 
     class DataBlock {
+    public:
+
         DataBlock(std::vector<double_t> data, std::string compression) {
             this->compression = compression;
             compress_data(data);
@@ -93,7 +95,6 @@ namespace neuro21 {
             this->compression = compression;
         }
 
-    public:
         std::vector<double_t> get_data() {
             return decompress_data();
         }
@@ -146,31 +147,56 @@ namespace neuro21 {
     protected:
         std::int64_t number_of_bytes_header = 2048;
         std::int64_t number_of_bytes_str = 100;
-        bool initiated = false;
+        std::string header_version = "0.0.1";
 
     public:
-        std::string file_type = "";
-        std::string version = "";
-        std::string compression = "";
+        std::string file_type;
+        std::string version;
+
+        std::string patient_id;
+        std::string session_id;
+        std::string channel_id;
+        std::string compression;
         double_t sampling_rate = -1;
 
         FileHeader() = default;
 
-        explicit FileHeader(const std::string &file_type, const std::string &version, const std::string &compression,
-                            double sampling_rate) {
+        explicit FileHeader(
+                const std::string &file_type,
+                const std::string &version,
+                const std::string &patient_id,
+                const std::string &session_id,
+                const std::string &channel_id,
+                const std::string &compression,
+                const double_t sampling_rate
+                ) {
+
             this->file_type = file_type;
             this->version = version;
+
+            this->patient_id = patient_id;
+            this->session_id = session_id;
+            this->channel_id = channel_id;
+
             this->compression = compression;
             this->sampling_rate = sampling_rate;
         }
 
         explicit FileHeader(const std::vector<uint8_t> &data) {
             uint64_t offset = 0;
+            uint64_t data_start_byte = 0;
 
             file_type = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
             version = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
+
+            patient_id = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
+            session_id = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
+            channel_id = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
+
             compression = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
             sampling_rate = neuro21::SerializeDouble::deserialize(data, offset);
+
+            data_start_byte = neuro21::SerializeUInt64::deserialize(data, offset);
             int32_t crc_value = neuro21::SerializeInt32::deserialize(data, offset);
 
             if (crc_value != this->crc()) {
@@ -184,8 +210,14 @@ namespace neuro21 {
 
             neuro21::SerializeString::serialize(file_type, data, number_of_bytes_str);
             neuro21::SerializeString::serialize(version, data, number_of_bytes_str);
+
+            neuro21::SerializeString::serialize(patient_id, data, number_of_bytes_str);
+            neuro21::SerializeString::serialize(session_id, data, number_of_bytes_str);
+            neuro21::SerializeString::serialize(channel_id, data, number_of_bytes_str);
+
             neuro21::SerializeString::serialize(compression, data, number_of_bytes_str);
             neuro21::SerializeDouble::serialize(sampling_rate, data);
+            neuro21::SerializeUInt64::serialize(number_of_bytes_header, data);
             return data;
         }
 
@@ -199,9 +231,13 @@ namespace neuro21 {
         [[nodiscard]] std::uint64_t header_size_wo_crc() const {
             int64_t size_bytes = 0;
 
-            size_bytes += number_of_bytes_str * 3; // file_type, version, compression
+            size_bytes += number_of_bytes_str * 6; // file_type, version, patient_id, session_id, channel_id, compression
             size_bytes += sizeof(double_t); // sampling_rate
             return size_bytes;
+        }
+
+        [[nodiscard]] std::uint64_t header_size() const {
+            return header_size_wo_crc() + sizeof(int32_t);
         }
 
         [[nodiscard]] int32_t crc() const {
@@ -212,6 +248,10 @@ namespace neuro21 {
             return number_of_bytes_header;
         }
 
+        [[nodiscard]] std::string get_file_header_version() const {
+            return header_version;
+        }
+
         [[nodiscard]] uint64_t get_number_of_bytes_str() const {
             return number_of_bytes_str;
         }
@@ -219,6 +259,9 @@ namespace neuro21 {
         [[nodiscard]] std::string to_string() const {
             return "File type: " + file_type + "\n"
                    + "Version: " + version + "\n"
+                     + "Patient ID: " + patient_id + "\n"
+                     + "Session ID: " + session_id + "\n"
+                     + "Channel ID: " + channel_id + "\n"
                    + "Compression: " + compression + "\n"
                    + "Sampling rate: " + std::to_string(sampling_rate) + "\n";
         }
@@ -245,7 +288,7 @@ namespace neuro21 {
         FileHeader header;
         std::fstream file;
 
-        explicit MetadataFile(const std::string& path_file, const std::string& mode) {
+        explicit MetadataFile(const std::string& path_file) {
             path = path_file;
         }
 
@@ -277,12 +320,30 @@ namespace neuro21 {
             }
         }
 
+        void setHeader(const FileHeader& header) {
+            this->header = header;
+        }
+
+        neuro21::FileHeader getHeader() {
+            return header;
+        }
+
         void writeHeader() {
             if (!file.is_open()) {
                 openFile(path, "w");
             }
             std::vector<uint8_t> data = header.serialize_header();
             file.write(reinterpret_cast<char*>(data.data()), data.size());
+            closeFile();
+        }
+
+        void updateHeader() {
+            if (!file.is_open()) {
+                openFile(path, "r+");
+            }
+            std::vector<uint8_t> data = header.serialize_header();
+            file.seekp(0, std::ios::beg); // Move to the beginning of the file
+            file.write(reinterpret_cast<char*>(data.data()), header.get_number_of_bytes_header());
             closeFile();
         }
 
@@ -293,8 +354,6 @@ namespace neuro21 {
             _readHeader();
             closeFile();
         }
-
-
 
     };
 

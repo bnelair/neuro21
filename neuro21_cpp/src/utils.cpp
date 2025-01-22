@@ -9,14 +9,14 @@ namespace neuro21 {
 
     class Generate{
     public:
-        static std::vector<double> generate_cumulative_random_data(size_t size) {
-            std::vector<double> random_data(size);
-            std::vector<double> cumulative_data(size);
+        static std::vector<double_t> generate_cumulative_random_data(size_t size) {
+            std::vector<double_t> random_data(size);
+            std::vector<double_t> cumulative_data(size);
 
             std::mt19937 gen(42);  // Use a fixed seed for reproducibility
             std::normal_distribution<> dist(0.0, 1.0); // Standard normal distribution
 
-            double cumulative_sum = 0.0;
+            double_t cumulative_sum = 0.0;
             for (size_t i = 0; i < size; ++i) {
                 random_data[i] = dist(gen);
                 cumulative_sum += random_data[i];
@@ -26,12 +26,12 @@ namespace neuro21 {
             return cumulative_data;
         }
 
-        static std::vector<double> generate_random_samples(size_t count) {
-            std::vector<double> samples;
+        static std::vector<double_t> generate_random_samples(size_t count) {
+            std::vector<double_t> samples;
             samples.reserve(count);
             srand(static_cast<unsigned>(time(nullptr))); // Seed for random number generation
             for (size_t i = 0; i < count; ++i) {
-                samples.push_back(static_cast<double>(rand()) / RAND_MAX * 100.0); // Random doubles between 0 and 100
+                samples.push_back(static_cast<double_t>(rand()) / RAND_MAX * 100.0); // Random doubles between 0 and 100
             }
             return samples;
         }
