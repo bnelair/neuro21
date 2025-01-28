@@ -7,6 +7,17 @@
 
 namespace neuro21 {
 
+    class Timestamp {
+    public:
+        static int64_t get_current_timestamp_usec() {
+            auto now = std::chrono::system_clock::now();
+            auto duration = now.time_since_epoch();
+            auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+            return microseconds;
+        }
+
+    };
+
     class Generate{
     public:
         static std::vector<double_t> generate_cumulative_random_data(size_t size) {
@@ -124,6 +135,23 @@ namespace neuro21 {
             }
             int32_t value = *reinterpret_cast<const int32_t*>(&data[offset]);
             offset += sizeof(int32_t);
+            return value;
+        }
+    };
+
+    class SerializeUInt32 {
+    public:
+        static void serialize(const uint32_t& value, std::vector<uint8_t>& data) {
+            data.insert(data.end(), reinterpret_cast<const uint8_t*>(&value),
+                        reinterpret_cast<const uint8_t*>(&value) + sizeof(uint32_t));
+        }
+
+        static uint32_t deserialize(const std::vector<uint8_t>& data, uint64_t& offset) {
+            if (offset + sizeof(uint32_t) > data.size()) {
+                throw std::out_of_range("Insufficient data for deserialization");
+            }
+            uint32_t value = *reinterpret_cast<const uint32_t*>(&data[offset]);
+            offset += sizeof(uint32_t);
             return value;
         }
     };

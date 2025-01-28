@@ -14,6 +14,9 @@
 #include "gorilla_compression.cpp"
 
 
+
+namespace fs = std::filesystem;
+
 namespace neuro21 {
 
     class MetadataBlock{
@@ -21,16 +24,18 @@ namespace neuro21 {
         int64_t start_uutc;
         int64_t end_uutc;
         uint64_t block_start;
-        uint64_t block_length;
-        int32_t block_crc;
+        uint64_t block_n_bytes;
+        uint32_t block_crc_decompressed;
+        uint32_t block_crc_compressed;
 
     public:
-        MetadataBlock(int64_t start_uutc, int64_t end_uutc, uint64_t block_start, uint64_t block_length, uint64_t block_crc) {
+        MetadataBlock(int64_t start_uutc, int64_t end_uutc, uint64_t block_start, uint64_t block_n_bytes, uint32_t block_crc_decompressed, uint32_t block_crc_compressed) {
             this->start_uutc = start_uutc;
             this->end_uutc = end_uutc;
             this->block_start = block_start;
-            this->block_length = block_length;
-            this->block_crc = block_crc;
+            this->block_n_bytes = block_n_bytes;
+            this->block_crc_decompressed = block_crc_decompressed;
+            this->block_crc_compressed = block_crc_compressed;
         }
 
         MetadataBlock(const std::vector<uint8_t>& data) {
@@ -38,8 +43,9 @@ namespace neuro21 {
             start_uutc = neuro21::SerializeInt64::deserialize(data, offset);
             end_uutc = neuro21::SerializeInt64::deserialize(data, offset);
             block_start = neuro21::SerializeUInt64::deserialize(data, offset);
-            block_length = neuro21::SerializeUInt64::deserialize(data, offset);
-            block_crc = neuro21::SerializeInt32::deserialize(data, offset);
+            block_n_bytes = neuro21::SerializeUInt64::deserialize(data, offset);
+            block_crc_decompressed = neuro21::SerializeUInt32::deserialize(data, offset);
+            block_crc_compressed = neuro21::SerializeUInt32::deserialize(data, offset);
         }
 
         [[nodiscard]] std::vector<uint8_t> serialize() const {
@@ -47,8 +53,9 @@ namespace neuro21 {
             neuro21::SerializeInt64::serialize(start_uutc, data);
             neuro21::SerializeInt64::serialize(end_uutc, data);
             neuro21::SerializeInt64::serialize(block_start, data);
-            neuro21::SerializeInt64::serialize(block_length, data);
-            neuro21::SerializeInt64::serialize(block_crc, data);
+            neuro21::SerializeInt64::serialize(block_n_bytes, data);
+            neuro21::SerializeUInt32::serialize(block_crc_decompressed, data);
+            neuro21::SerializeUInt32::serialize(block_crc_compressed, data);
             return data;
         }
 
@@ -65,19 +72,24 @@ namespace neuro21 {
         }
 
         [[nodiscard]] uint64_t get_block_length() const {
-            return block_length;
+            return block_n_bytes;
         }
 
-        [[nodiscard]] uint64_t get_block_crc() const {
-            return block_crc;
+        [[nodiscard]] uint32_t get_block_crc_compressed() const {
+            return block_crc_compressed;
         }
 
-        [[nodiscard]] std::string to_string() const {
-            return "Start UUTC: " + std::to_string(start_uutc) + "\n"
-                   + "End UUTC: " + std::to_string(end_uutc) + "\n"
-                   + "Block start: " + std::to_string(block_start) + "\n"
-                   + "Block length: " + std::to_string(block_length) + "\n"
-                   + "Block CRC: " + std::to_string(block_crc) + "\n";
+        [[nodiscard]] uint32_t get_block_crc_decompressed() const {
+            return block_crc_decompressed;
+        }
+
+        [[nodiscard]] uint32_t get_metadata_crc() const {
+            std::vector<uint8_t> data = serialize();
+            return neuro21::CRC::calculate(data);
+        }
+
+        [[nodiscard]] static uint64_t get_number_of_metadata_block_bytes() {
+            return 8 + 8 + 8 + 8 + 4 + 4;
         }
 
     };
@@ -87,16 +99,20 @@ namespace neuro21 {
 
         DataBlock(std::vector<double_t> data, std::string compression) {
             this->compression = compression;
+            this->crc_decompressed_value = calculate_crc(data);
             compress_data(data);
+            this->crc_compressed_value = calculate_compressed_crc();
         }
 
         DataBlock(std::vector<uint8_t> compressed_data, std::string compression) {
-            this->compressed_data = compressed_data;
             this->compression = compression;
+            this->compressed_data = compressed_data;
+            this->crc_compressed_value = calculate_compressed_crc();
         }
 
         std::vector<double_t> get_data() {
-            return decompress_data();
+            auto data = decompress_data();
+            return data;
         }
 
         [[nodiscard]] std::vector<uint8_t> get_compressed_data() const {
@@ -112,14 +128,44 @@ namespace neuro21 {
                    + "Data size: " + std::to_string(compressed_data.size()) + " bytes\n";
         }
 
+        [[nodiscard]] uint32_t get_decompressed_crc() const {
+            return crc_decompressed_value;
+        }
+
+        [[nodiscard]] uint32_t get_compressed_crc() const {
+            return crc_compressed_value;
+        }
+
+        [[nodiscard]] uint32_t calculate_compressed_crc() const {
+            return calculate_crc(compressed_data);
+        }
+
+        [[nodiscard]] uint32_t calculate_decompressed_crc() {
+            std::vector<double_t> data = get_data();
+            uint32_t crc = calculate_crc(data);
+            return crc;
+        }
+
+        [[nodiscard]] static uint32_t calculate_crc(const std::vector<uint8_t>& data) {
+            return neuro21::CRC::calculate(data);
+        }
+
+        [[nodiscard]] static uint32_t calculate_crc(std::vector<double_t> data) {
+            std::vector<uint8_t> data_bytes = std::vector<uint8_t>(data.size() * sizeof(double_t));
+            std::memcpy(data_bytes.data(), data.data(), data.size() * sizeof(double_t));
+            return calculate_crc(data_bytes);
+        }
+
     protected:
         std::vector<uint8_t> compressed_data;
-        std::string compression = "";
+        std::string compression;
+        std::uint32_t crc_decompressed_value = 0;
+        std::uint32_t crc_compressed_value = 0;
 
         void compress_data(std::vector<double_t>& data) {
             if (compression == "gorilla") {
                 compressed_data = GorillaCompressor().compress(data);
-            } else if (compression == "") {
+            } else if (compression.empty()) {
                 compressed_data = std::vector<uint8_t>(data.size() * sizeof(double_t));
                 std::memcpy(compressed_data.data(), data.data(), data.size() * sizeof(double_t));
             }
@@ -130,8 +176,9 @@ namespace neuro21 {
 
         std::vector<double_t> decompress_data() {
             if (compression == "gorilla") {
-                return GorillaDecompressor().decompress(compressed_data);
-            } else if (compression == "") {
+                auto decompressed_data = GorillaDecompressor().decompress(compressed_data);
+                return decompressed_data;
+            } else if (compression.empty()) {
                 std::vector<double_t> data(compressed_data.size() / sizeof(double_t));
                 std::memcpy(data.data(), compressed_data.data(), compressed_data.size());
                 return data;
@@ -145,13 +192,12 @@ namespace neuro21 {
 
     class FileHeader {
     protected:
-        std::int64_t number_of_bytes_header = 2048;
-        std::int64_t number_of_bytes_str = 100;
-        std::string header_version = "0.0.1";
+        static constexpr std::int64_t number_of_bytes_header = 2048;
+        static constexpr std::int64_t number_of_bytes_str = 100;
+        std::string version = "0.0.1";
 
     public:
         std::string file_type;
-        std::string version;
 
         std::string patient_id;
         std::string session_id;
@@ -197,7 +243,7 @@ namespace neuro21 {
             sampling_rate = neuro21::SerializeDouble::deserialize(data, offset);
 
             data_start_byte = neuro21::SerializeUInt64::deserialize(data, offset);
-            int32_t crc_value = neuro21::SerializeInt32::deserialize(data, offset);
+            uint32_t crc_value = neuro21::SerializeUInt32::deserialize(data, offset);
 
             if (crc_value != this->crc()) {
                 throw std::runtime_error("CRC mismatch");
@@ -223,7 +269,7 @@ namespace neuro21 {
 
         [[nodiscard]] std::vector<uint8_t> serialize_header() const {
             std::vector<uint8_t> data = serialize_header_wo_crc();
-            neuro21::SerializeInt32::serialize(neuro21::CRC::calculate(data), data);
+            neuro21::SerializeUInt32::serialize(neuro21::CRC::calculate(data), data);
             data.insert(data.end(), number_of_bytes_header - data.size(), 0);
             return data;
         }
@@ -237,19 +283,19 @@ namespace neuro21 {
         }
 
         [[nodiscard]] std::uint64_t header_size() const {
-            return header_size_wo_crc() + sizeof(int32_t);
+            return header_size_wo_crc() + sizeof(uint32_t);
         }
 
-        [[nodiscard]] int32_t crc() const {
+        [[nodiscard]] uint32_t crc() const {
             return neuro21::CRC::calculate(serialize_header_wo_crc());
         }
 
-        [[nodiscard]] uint64_t get_number_of_bytes_header() const {
+        [[nodiscard]] static uint64_t get_number_of_bytes_header()  {
             return number_of_bytes_header;
         }
 
         [[nodiscard]] std::string get_file_header_version() const {
-            return header_version;
+            return version;
         }
 
         [[nodiscard]] uint64_t get_number_of_bytes_str() const {
@@ -266,12 +312,25 @@ namespace neuro21 {
                    + "Sampling rate: " + std::to_string(sampling_rate) + "\n";
         }
 
+        bool operator==(const FileHeader& other) const {
+            return file_type == other.file_type
+                   && version == other.version
+                   && patient_id == other.patient_id
+                   && session_id == other.session_id
+                   && channel_id == other.channel_id
+                   && compression == other.compression
+                   && sampling_rate == other.sampling_rate
+                   && get_number_of_bytes_header() == other.get_number_of_bytes_header()
+                   && crc() == other.crc();
+        }
     };
 
-    class MetadataFile {
-    private:
-        std::string path;
-        std::string mode;
+    class GenericFile {
+    protected:
+        fs::path path_file;
+        std::fstream file;
+        FileHeader header;
+        bool file_initialized = false;
 
         void _readHeader() {
             if (!file.is_open()) {
@@ -283,34 +342,71 @@ namespace neuro21 {
             header = FileHeader(data);
         }
 
-
-    public:
-        FileHeader header;
-        std::fstream file;
-
-        explicit MetadataFile(const std::string& path_file) {
-            path = path_file;
-        }
-
-        ~MetadataFile() {
-            if (file.is_open()) {
-                file.close();
+        void _writeHeader() {
+            if (!file.is_open()) {
+                throw std::runtime_error("File is not open.");
             }
+
+            std::vector<uint8_t> data = header.serialize_header();
+            file.write(reinterpret_cast<char*>(data.data()), header.get_number_of_bytes_header());
         }
 
-        void openFile(const std::string& path_file, const std::string& mode) {
+        void _updateHeader() {
+            if (!file.is_open()) {
+                throw std::runtime_error("File is not open.");
+            }
+
+            std::vector<uint8_t> data = header.serialize_header();
+            file.seekp(0, std::ios::beg); // Move to the beginning of the file
+            file.write(reinterpret_cast<char*>(data.data()), header.get_number_of_bytes_header());
+        }
+
+        std::vector<uint8_t> _readDataBytes(uint64_t offset, uint64_t length) {
+            if (!file.is_open()) {
+                throw std::runtime_error("File is not open.");
+            }
+
+            std::vector<uint8_t> data(length);
+            file.seekg(offset, std::ios::beg);
+            file.read(reinterpret_cast<char*>(data.data()), length);
+            return data;
+
+        }
+
+        void _writeDataBytes(const std::vector<uint8_t>& data, uint64_t offset) {
+            if (!file.is_open()) {
+                throw std::runtime_error("File is not open.");
+            }
+
+            file.seekp(offset, std::ios::beg);
+            file.write(reinterpret_cast<const char*>(data.data()), data.size());
+        }
+
+        void _appendDataBytes(const std::vector<uint8_t>& data) {
+            if (!file.is_open()) {
+                throw std::runtime_error("File is not open.");
+            }
+            file.seekp(0, std::ios::end);
+            file.write(reinterpret_cast<const char*>(data.data()), data.size());
+        }
+
+        void openFile(const fs::path& path_file, const std::string& mode) {
             if (mode == "r") {
+                // if does not exists, throw error
+                if (!fs::exists(path_file)) {
+                    throw std::runtime_error("File does not exist: " + path_file.string());
+                }
                 file.open(path_file, std::ios::in | std::ios::binary);
             } else if (mode == "w") {
                 file.open(path_file, std::ios::out | std::ios::binary);
             } else if (mode == "a") {
-                file.open(path_file, std::ios::out | std::ios::app | std::ios::binary);
+                file.open(path_file, std::ios::in | std::ios::out | std::ios::binary);
             } else {
                 throw std::invalid_argument("Invalid file mode. Use 'r', 'w', or 'a' for read, write or append.");
             }
 
             if (!file.is_open()) {
-                throw std::ios_base::failure("Failed to open file: " + path_file);
+                throw std::ios_base::failure("Failed to open file: " + path_file.string());
             }
         }
 
@@ -320,42 +416,231 @@ namespace neuro21 {
             }
         }
 
-        void setHeader(const FileHeader& header) {
-            this->header = header;
+        void overWriteFileWithNewHeader() {
+            if (!file.is_open()) {
+                openFile(path_file, "w");
+            }
+            _writeHeader();
+            closeFile();
+            file_initialized = true;
+        }
+
+        void readHeader() {
+            if (!file.is_open()) {
+                openFile(path_file, "r");
+            }
+            _readHeader();
+            closeFile();
+            file_initialized = true;
+        }
+
+    public:
+
+        explicit GenericFile(const fs::path& path_file) {
+            this->path_file = path_file;
+            if (file_exists()) {
+                readHeader();
+            }
+            else {
+                throw std::runtime_error("File does not exist: " + path_file.string());
+            }
+        }
+
+        explicit GenericFile(const fs::path& path_file, FileHeader header) {
+            this->path_file = path_file;
+            this->header = std::move(header);
+
+            overWriteFileWithNewHeader();
+        }
+
+        ~GenericFile() {
+            if (file.is_open()) {
+                file.close();
+            }
         }
 
         neuro21::FileHeader getHeader() {
             return header;
         }
 
-        void writeHeader() {
+        void updateExistingHeader(neuro21::FileHeader new_header) {
+            header = new_header;
+
             if (!file.is_open()) {
-                openFile(path, "w");
+                openFile(path_file, "a");
             }
-            std::vector<uint8_t> data = header.serialize_header();
-            file.write(reinterpret_cast<char*>(data.data()), data.size());
+            _updateHeader();
             closeFile();
         }
 
-        void updateHeader() {
-            if (!file.is_open()) {
-                openFile(path, "r+");
-            }
-            std::vector<uint8_t> data = header.serialize_header();
-            file.seekp(0, std::ios::beg); // Move to the beginning of the file
-            file.write(reinterpret_cast<char*>(data.data()), header.get_number_of_bytes_header());
-            closeFile();
+
+
+        static bool file_exists(const fs::path& path_file) {
+            return fs::exists(path_file);
         }
 
-        void readHeader() {
-            if (!file.is_open()) {
-                openFile(path, "r");
-            }
-            _readHeader();
-            closeFile();
+        static bool file_exists(const std::string& path_file) {
+            fs::path path(path_file);
+            return file_exists(path);
         }
+
+        bool file_exists() {
+            return file_exists(path_file);
+        }
+
+
+
+
 
     };
+
+    class MetadataFile : public GenericFile {
+    public:
+
+        explicit MetadataFile(const fs::path& path_file) : GenericFile(path_file) {}
+
+        explicit MetadataFile(const fs::path& path_file, FileHeader header) : GenericFile(path_file, header) {}
+
+        ~MetadataFile() {
+            if (file.is_open()) {
+                file.close();
+            }
+        }
+
+        void writeMetadataBlock(const MetadataBlock& block) {
+            // for streaming
+            if (!file.is_open()) {
+                openFile(path_file, "a");
+            }
+            std::vector<uint8_t> data = block.serialize();
+            _appendDataBytes(data);
+            closeFile();
+        }
+
+        void writeMultipleMetadataBlocks(const std::vector<MetadataBlock>& block) {
+            // for bulk writing
+            if (!file.is_open()) {
+                openFile(path_file, "a");
+            }
+            for (const MetadataBlock& b : block) {
+                std::vector<uint8_t> data = b.serialize();
+                _appendDataBytes(data);
+            }
+            closeFile();
+        }
+
+        MetadataBlock readMetadataBlock(uint64_t block_index) {
+            if (!file.is_open()) {
+                openFile(path_file, "r");
+            }
+            uint64_t offset = header.get_number_of_bytes_header() + block_index * MetadataBlock::get_number_of_metadata_block_bytes();
+
+            std::vector<uint8_t> data = _readDataBytes(offset, MetadataBlock::get_number_of_metadata_block_bytes());
+            MetadataBlock read_block = MetadataBlock(data);
+            closeFile();
+            return read_block;
+        }
+
+        std::vector<MetadataBlock> readMultipleMetadataBlocks(uint64_t block_index, uint64_t block_count) {
+            if (!file.is_open()) {
+                openFile(path_file, "r");
+            }
+            std::vector<MetadataBlock> blocks;
+            for (int i = 0; i < block_count; i++) {
+
+                uint64_t offset = header.get_number_of_bytes_header() + i * MetadataBlock::get_number_of_metadata_block_bytes();
+                uint64_t n_bytes = MetadataBlock::get_number_of_metadata_block_bytes();
+                std::vector<uint8_t> data = _readDataBytes(offset, n_bytes);
+                MetadataBlock read_block(data);
+
+                blocks.push_back(
+                        read_block
+                        );
+            }
+            closeFile();
+            return blocks;
+        }
+    };
+
+    class DataFile : public GenericFile {
+    public:
+        explicit DataFile(const fs::path& path_file) : GenericFile(path_file) {}
+
+        explicit DataFile(const fs::path& path_file, FileHeader header) : GenericFile(path_file, header) {}
+
+        ~DataFile() {
+            if (file.is_open()) {
+                file.close();
+            }
+        }
+
+        void writeDataBlock(const DataBlock& block) {
+            // for streaming
+            if (!file.is_open()) {
+                openFile(path_file, "a");
+            }
+            std::vector<uint8_t> data = block.get_compressed_data();
+            _appendDataBytes(data);
+            closeFile();
+        }
+
+        DataBlock readDataBlock(MetadataBlock& metadata_block) {
+            if (!file.is_open()) {
+                openFile(path_file, "r");
+            }
+            std::vector<uint8_t> data = _readDataBytes(metadata_block.get_block_start(), metadata_block.get_block_length());
+            DataBlock read_block = DataBlock(data, header.compression);
+            closeFile();
+            return read_block;
+        }
+
+
+
+
+
+        void writeMultipleDataBlocks(const std::vector<DataBlock>& block) {
+            // for bulk writing
+            if (!file.is_open()) {
+                openFile(path_file, "a");
+            }
+            for (const DataBlock& b : block) {
+                std::vector<uint8_t> data = b.get_compressed_data();
+                _appendDataBytes(data);
+            }
+            closeFile();
+        }
+
+        std::vector<DataBlock> readMultipleDataBlocks(const std::vector<MetadataBlock>& metadata_blocks) {
+            if (!file.is_open()) {
+                openFile(path_file, "r");
+            }
+            std::vector<DataBlock> blocks;
+            for (const MetadataBlock& metadata_block : metadata_blocks) {
+                std::vector<uint8_t> data = _readDataBytes(metadata_block.get_block_start(), metadata_block.get_block_length());
+                blocks.emplace_back(data, header.compression);
+            }
+            closeFile();
+            return blocks;
+        }
+
+
+        uint64_t get_file_length() {
+            if (!fs::exists(path_file)) {
+                return 0;
+            }
+
+            if (!file.is_open()) {
+                openFile(path_file, "r");
+            }
+            file.seekg(0, std::ios::end);
+            uint64_t length = file.tellg();
+            closeFile();
+            return length;
+        }
+    };
+
+
+
 
 } // neuro21
 
