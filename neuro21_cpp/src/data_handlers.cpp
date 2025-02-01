@@ -639,9 +639,6 @@ namespace neuro21 {
         }
     };
 
-
-
-
 } // neuro21
 
 

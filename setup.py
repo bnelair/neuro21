@@ -1,3 +1,5 @@
+
+import sys
 from setuptools import setup, find_packages
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 
@@ -7,17 +9,37 @@ def get_requirements():
     with open("requirements.txt", "r") as f:
         return f.read().splitlines()
 
+# Compiler-specific arguments
+extra_compile_args = ["-std=c++17"]
+extra_link_args = []
+if sys.platform == "darwin":  # macOS
+    extra_compile_args.append("-mmacosx-version-min=10.15")
+    extra_link_args.append("-mmacosx-version-min=10.15")
+elif sys.platform == "win32":  # Windows (MSVC)
+    extra_compile_args = ["/std:c++17"]
+    extra_link_args = []
+elif sys.platform.startswith("linux"):  # Linux
+    extra_compile_args.append("-Wextra")  # Enable additional warnings
+
+
 # Define the C++ extension
 ext_modules = [
     Pybind11Extension(
         "pyneuro21.cpp.ccompression",
         sources=[
-            "neuro21_cpp/src/gorilla_compression.cpp",  # Corrected file extension
-            "pyneuro21/cpp/ccompression.cpp"    # Corrected file extension
+            "neuro21_cpp/src/gorilla_compression.cpp",
+            "neuro21_cpp/src/data_handlers.cpp",
+            "neuro21_cpp/src/utils.cpp",
+            "pyneuro21/cpp/ccompression.cpp"
         ],
-        include_dirs=[pybind11.get_include(), "neuro21_cpp/compression"],  # Path to header files
+        include_dirs=[
+            pybind11.get_include(),
+            "neuro21_cpp/src"
+        ],  # Path to header files
 
-        extra_compile_args=["-std=c++17"],  # C++17 standard
+        extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
+        language="c++",
     ),
 ]
 
