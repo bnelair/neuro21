@@ -5,3 +5,4 @@ h5py
 scipy
 setuptools
 pybind11
+bitstring

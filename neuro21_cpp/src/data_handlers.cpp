@@ -198,7 +198,6 @@ namespace neuro21 {
 
     public:
         std::string file_type;
-
         std::string patient_id;
         std::string session_id;
         std::string channel_id;
@@ -230,7 +229,6 @@ namespace neuro21 {
 
         explicit FileHeader(const std::vector<uint8_t> &data) {
             uint64_t offset = 0;
-            uint64_t data_start_byte = 0;
 
             file_type = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
             version = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
@@ -242,7 +240,6 @@ namespace neuro21 {
             compression = neuro21::SerializeString::deserialize(data, offset, number_of_bytes_str);
             sampling_rate = neuro21::SerializeDouble::deserialize(data, offset);
 
-            data_start_byte = neuro21::SerializeUInt64::deserialize(data, offset);
             uint32_t crc_value = neuro21::SerializeUInt32::deserialize(data, offset);
 
             if (crc_value != this->crc()) {
@@ -263,7 +260,6 @@ namespace neuro21 {
 
             neuro21::SerializeString::serialize(compression, data, number_of_bytes_str);
             neuro21::SerializeDouble::serialize(sampling_rate, data);
-            neuro21::SerializeUInt64::serialize(number_of_bytes_header, data);
             return data;
         }
 
@@ -300,16 +296,6 @@ namespace neuro21 {
 
         [[nodiscard]] uint64_t get_number_of_bytes_str() const {
             return number_of_bytes_str;
-        }
-
-        [[nodiscard]] std::string to_string() const {
-            return "File type: " + file_type + "\n"
-                   + "Version: " + version + "\n"
-                     + "Patient ID: " + patient_id + "\n"
-                     + "Session ID: " + session_id + "\n"
-                     + "Channel ID: " + channel_id + "\n"
-                   + "Compression: " + compression + "\n"
-                   + "Sampling rate: " + std::to_string(sampling_rate) + "\n";
         }
 
         bool operator==(const FileHeader& other) const {
